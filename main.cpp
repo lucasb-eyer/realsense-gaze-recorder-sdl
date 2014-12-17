@@ -14,14 +14,12 @@ PXCSenseManager *g_sm = nullptr;
 
 // Makes our error-checking life a little easier.
 bool pxc_verify(pxcStatus ret, std::string msg);
+bool sdl_verify(int ret, std::string msg);
 bool init_realsense();
 
 int main(int argc, char **argv){
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_EVERYTHING) != 0){
-        std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
+    if (!sdl_verify(SDL_Init(SDL_INIT_EVERYTHING), "initializing SDL"))
         return 1;
-    }
     std::atexit(SDL_Quit);
 
     // Gets `g_sm` ready for recording what we need.
@@ -53,6 +51,15 @@ bool pxc_verify(pxcStatus ret, std::string msg)
     }
     if (ret > PXC_STATUS_NO_ERROR)
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "RealSense Error", ("RealSense warning #" + std::to_string(ret) + ": " + msg).c_str(), nullptr);
+    return true;
+}
+
+bool sdl_verify(int ret, std::string msg)
+{
+    if (ret != 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL Error", ("Error " + msg + ": " + SDL_GetError()).c_str(), nullptr);
+        return false;
+    }
     return true;
 }
 
