@@ -5,9 +5,11 @@
 #include <locale>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include <SDL.h>
 #include <SDL_ttf.h>
+#include <SDL_image.h>
 
 #include <pxcsensemanager.h>
 
@@ -38,21 +40,10 @@ bool init_realsense();
 std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt);
 
 // x,y are relative screen coordinates, 0 being top/left and 1 being bottom/right.
-void rendermid(SDL_Texture* tex, float x, float y, int w, int h)
-{
-    // Get the texture w/h.
-    int tw, th;
-    SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+// w,h are screen resolution.
+void rendermid(SDL_Texture* tex, float x, float y, int w, int h);
 
-    //Setup the destination rectangle to be at the (pixel) position we want.
-    SDL_Rect dst;
-    dst.x = int(x*w - tw*0.5f);
-    dst.y = int(y*h - th*0.5f);
-
-    //Query the texture to get its width and height to use
-    SDL_QueryTexture(tex, NULL, NULL, &dst.w, &dst.h);
-    SDL_RenderCopy(g_renderer, tex, NULL, &dst);
-}
+float lerp(float t, float x0, float x1, float t0, float t1) { return x0 + (t - t0) / (t1 - t0) * (x1 - x0); };
 
 int main(int argc, char **argv)
 {
@@ -63,6 +54,9 @@ int main(int argc, char **argv)
     if (!ttf_verify(TTF_Init(), "initializing SDL_TTF"))
         return 1;
     std::atexit(TTF_Quit);
+
+    if (!sdl_verify(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG == IMG_INIT_PNG, "initializing SDL Image"))
+        return 1;
 
     // Gets `g_sm` ready for recording what we need.
     if (!init_realsense())
@@ -95,19 +89,38 @@ int main(int argc, char **argv)
         if (g_texts[i] == nullptr)
             return 5;
 
+    // Load Mr.Point into a texture.
+    SDL_Surface* mrpoint_surf = IMG_Load("data/mrpoint.png");
+    if (!sdl_verify(mrpoint_surf == nullptr, "loading Mr.Point"))
+        return 6;
+    std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mrpoint(
+        SDL_CreateTextureFromSurface(g_renderer, mrpoint_surf),
+        tex_deleter
+    );
+    SDL_FreeSurface(mrpoint_surf);
+    if (!sdl_verify(mrpoint == nullptr, "loading Mr.Point texture"))
+        return 6;
+
     // This is an extremely simple state-machine for handling input with the states
     // preparing -> recording -> done.
-    enum {
+    enum State {
         STATE_PRE,
         STATE_RECORDING,
         STATE_DONE,
+        STATE_QUIT,
     } state = STATE_PRE;
+
+    // The current position of Mr.Point (in relative screen-coordinates).
+    float x = 0.01f, y = 0.01f;
 
     // Remembers at what time the recording started.
     Uint32 t0 = 0;
 
+    // A separate thread for recording, otherwise we're LAGGY.
+    std::thread record_thread;
+
     SDL_Event e = { 0 };
-    while (e.type != SDL_QUIT) {
+    while (state != STATE_QUIT) {
         // Handle all events before moving to the next frame!
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_KEYUP) {
@@ -115,19 +128,59 @@ int main(int argc, char **argv)
                 if (state == STATE_PRE) {
                     state = STATE_RECORDING;
                     t0 = SDL_GetTicks();
+                    
+                    // Start the other thread which will record the video.
+                    record_thread = std::move(std::thread([](State* pstate){
+                        // Only record when we should be recording, duh!
+                        while (*pstate == STATE_RECORDING) {
+                            // It seems that acquiring frames is necessary for the recording to record anything!
+                            // I tried just idling in a MessageBox and it didn't work.
+
+                            // Waits until new frame is available and locks it for application processing.
+                            //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
+                            if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
+                                break;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
+
+                            // Done working with the frame.
+                            g_sm->ReleaseFrame();
+                        }
+                    }, &state));
                 }
                 // When done recording, quit upon a keypress.
                 else if (state == STATE_DONE) {
-                    e.type = SDL_QUIT;
+                    state = STATE_QUIT;
+                    break;
                 }
+            }
+            else if (e.type == SDL_QUIT) {
+                state = STATE_QUIT;
+                break;
             }
             // Ignore all other kinds of events.
         }
 
         // Update the dot's position according to the "storyline".
         if (state == STATE_RECORDING) {
-            // For now, the storyline is to record one second!
-            state = SDL_GetTicks() < t0 + 5000 ? STATE_RECORDING : STATE_DONE;
+            float t = 0.001f*(SDL_GetTicks() - t0);
+
+            // 0-5: Move topleft->topright.
+            if (0 <= t && t < 3) {
+                x = lerp(t, 0.01, 0.99, 0, 3);
+            }
+            else if (3 <= t && t < 5) {
+                y = lerp(t, 0.01, 0.99, 3, 5);
+            }
+            else if (5 <= t && t < 8) {
+                x = lerp(t, 0.99, 0.01, 5, 8);
+            }
+            else if (8 <= t && t < 10) {
+                y = lerp(t, 0.99, 0.01, 8, 10);
+            }
+            else {
+                // Switch over to done state.
+                state = STATE_DONE;
+                record_thread.join();
+            }
         }
 
         // Clear the screen in black.
@@ -139,8 +192,10 @@ int main(int argc, char **argv)
         case STATE_PRE:
             rendermid(g_texts[TEXT_INSTRUCTION].get(), 0.5f, 0.33f, w, h);
             rendermid(g_texts[TEXT_START].get(), 0.5f, 0.66f, w, h);
+            rendermid(mrpoint.get(), x, y, w, h);
             break;
         case STATE_RECORDING:
+            rendermid(mrpoint.get(), x, y, w, h);
             break;
         case STATE_DONE:
             rendermid(g_texts[TEXT_QUIT].get(), 0.5f, 0.5f, w, h);
@@ -150,19 +205,19 @@ int main(int argc, char **argv)
         // Swap framebuffers.
         SDL_RenderPresent(g_renderer);
 
-        // Only record when we should be recording, duh!
-        if (state == STATE_RECORDING) {
-            // It seems that acquiring frames is necessary for the recording to record anything!
-            // I tried just idling in a MessageBox and it didn't work.
+        //// Only record when we should be recording, duh!
+        //if (state == STATE_RECORDING) {
+        //    // It seems that acquiring frames is necessary for the recording to record anything!
+        //    // I tried just idling in a MessageBox and it didn't work.
 
-            // Waits until new frame is available and locks it for application processing.
-            //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
-            if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
-                return 100;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
+        //    // Waits until new frame is available and locks it for application processing.
+        //    //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
+        //    if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
+        //        return 100;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
 
-            // Done working with the frame.
-            g_sm->ReleaseFrame();
-        }
+        //    // Done working with the frame.
+        //    g_sm->ReleaseFrame();
+        //}
     }
 
     return 0;
@@ -262,3 +317,19 @@ std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt)
     sdl_verify(tex == nullptr, "moving the surface to a texture.");
     return tex;
 };
+
+void rendermid(SDL_Texture* tex, float x, float y, int w, int h)
+{
+    // Get the texture w/h.
+    int tw, th;
+    SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+
+    //Setup the destination rectangle to be at the (pixel) position we want.
+    SDL_Rect dst;
+    dst.x = int(x*w - tw*0.5f);
+    dst.y = int(y*h - th*0.5f);
+
+    //Query the texture to get its width and height to use
+    SDL_QueryTexture(tex, NULL, NULL, &dst.w, &dst.h);
+    SDL_RenderCopy(g_renderer, tex, NULL, &dst);
+}
