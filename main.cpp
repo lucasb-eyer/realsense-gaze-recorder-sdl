@@ -1,6 +1,9 @@
-#include <iostream>
-#include <string>
+#include <codecvt>
 #include <cstdlib>
+#include <ctime>
+#include <iostream>
+#include <locale>
+#include <string>
 
 #include <SDL.h>
 
@@ -11,6 +14,8 @@ PXCSenseManager *g_sm = nullptr;
 
 // Makes our error-checking life a little easier.
 bool pxc_verify(pxcStatus ret, std::string msg);
+// Current date and time as almost-ISO string.
+std::string now();
 
 int main(int argc, char **argv){
     // Initialize SDL
@@ -28,14 +33,25 @@ int main(int argc, char **argv){
     std::atexit([](){ g_sm->Release(); });
 
     // Sets file recording or playback
-    if (!pxc_verify(g_sm->QueryCaptureManager()->SetFileName(L"C:/Users/beyer/lolz.rssdk", true), "Setting filename for recording."))
+    char *pszPath = SDL_GetPrefPath("Beymans", "RealSenseRecorder");
+    if (!pszPath) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL Error", "Can't retrieve your home directory. What the!?", nullptr);
+        return 100;
+    }
+    std::string utf8path = pszPath + now() + ".rssdk";
+    SDL_free(pszPath);
+    std::cout << "Recording to " << utf8path << std::endl;
+
+    // Damn you RealSense!
+    std::wstring path = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(utf8path);
+    if (!pxc_verify(g_sm->QueryCaptureManager()->SetFileName(path.c_str(), true), "Setting filename for recording."))
         return 3;
 
     // Chooses what streams we want to capture.
     if (!pxc_verify(g_sm->EnableStream(PXCCapture::STREAM_TYPE_COLOR, 640, 480, 30), "Enabling RGB stream."))
         return 4;
     if (!pxc_verify(g_sm->EnableStream(PXCCapture::STREAM_TYPE_DEPTH, 640, 480, 30), "Enabling D stream. Yup Alex, can't get the D!"))
-        return 5;
+        return 4;
 
     if (!pxc_verify(g_sm->Init(), "Initialize the capture."))
         return 5;
@@ -66,4 +82,14 @@ bool pxc_verify(pxcStatus ret, std::string msg)
     if (ret > PXC_STATUS_NO_ERROR)
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "RealSense Error", ("RealSense warning #" + std::to_string(ret) + ": " + msg).c_str(), nullptr);
     return true;
+}
+
+std::string now()
+{
+    std::time_t rawtime;
+    std::time(&rawtime);
+
+    char buffer[80];
+    std::strftime(buffer, 80, "%Y-%m-%d-%H-%M-%S", std::localtime(&rawtime));
+    return std::string(buffer);
 }
