@@ -3,21 +3,56 @@
 #include <ctime>
 #include <iostream>
 #include <locale>
+#include <memory>
 #include <string>
 
 #include <SDL.h>
+#include <SDL_ttf.h>
 
 #include <pxcsensemanager.h>
+
+// Some cleanup helpers.
+auto surf_deleter = [](SDL_Surface* s){ SDL_FreeSurface(s); };
+auto tex_deleter = [](SDL_Texture* t){ SDL_DestroyTexture(t); };
 
 // As global so we can use atexit.
 PXCSenseManager *g_sm = nullptr;
 SDL_Window *g_window = nullptr;
 SDL_Renderer *g_renderer = nullptr;
+TTF_Font *g_font = nullptr;
+
+enum {
+    TEXT_INSTRUCTION = 0,
+    TEXT_START,
+    TEXT_QUIT,
+    TEXT_FILE,
+    TEXT_COUNT
+};
+std::unique_ptr<SDL_Texture, decltype(tex_deleter)> g_texts[TEXT_COUNT] = { nullptr };
 
 // Makes our error-checking life a little easier.
 bool pxc_verify(pxcStatus ret, std::string msg);
 bool sdl_verify(int ret, std::string msg);
+bool ttf_verify(int ret, std::string msg);
 bool init_realsense();
+std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt);
+
+// x,y are relative screen coordinates, 0 being top/left and 1 being bottom/right.
+void rendermid(SDL_Texture* tex, float x, float y, int w, int h)
+{
+    // Get the texture w/h.
+    int tw, th;
+    SDL_QueryTexture(tex, NULL, NULL, &tw, &th);
+
+    //Setup the destination rectangle to be at the (pixel) position we want.
+    SDL_Rect dst;
+    dst.x = int(x*w - tw*0.5f);
+    dst.y = int(y*h - th*0.5f);
+
+    //Query the texture to get its width and height to use
+    SDL_QueryTexture(tex, NULL, NULL, &dst.w, &dst.h);
+    SDL_RenderCopy(g_renderer, tex, NULL, &dst);
+}
 
 int main(int argc, char **argv)
 {
@@ -25,15 +60,40 @@ int main(int argc, char **argv)
         return 1;
     std::atexit(SDL_Quit);
 
+    if (!ttf_verify(TTF_Init(), "initializing SDL_TTF"))
+        return 1;
+    std::atexit(TTF_Quit);
+
     // Gets `g_sm` ready for recording what we need.
     if (!init_realsense())
         return 2;
 
     // Open up a window.
+#ifdef _DEBUG
+    if (!sdl_verify(SDL_CreateWindowAndRenderer(640, 480, 0, &g_window, &g_renderer), "opening a window"))
+#else
     if (!sdl_verify(SDL_CreateWindowAndRenderer(0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP, &g_window, &g_renderer), "opening a window"))
+#endif
         return 3;
     atexit([](){ SDL_DestroyWindow(g_window); });
     atexit([](){ SDL_DestroyRenderer(g_renderer); });
+
+    // Get the window's w/h.
+    int w, h;
+    SDL_GL_GetDrawableSize(g_window, &w, &h);
+
+    // Load a default font.
+    if (!ttf_verify((g_font = TTF_OpenFont("data/Orbitron Medium.ttf", 24)) == nullptr, "opening the Orbitron font"))
+        return 4;
+    atexit([](){ TTF_CloseFont(g_font); });
+
+    g_texts[TEXT_INSTRUCTION] = mktxt("Follow the green dot with your eyes.");
+    g_texts[TEXT_START] = mktxt("Press any key to start.");
+    g_texts[TEXT_QUIT] = mktxt("Press any key to quit.");
+    g_texts[TEXT_FILE] = mktxt("Recording into the ~User/AppData/Roaming/...");
+    for (int i = 0; i < TEXT_COUNT; ++i)
+        if (g_texts[i] == nullptr)
+            return 5;
 
     // This is an extremely simple state-machine for handling input with the states
     // preparing -> recording -> done.
@@ -44,7 +104,7 @@ int main(int argc, char **argv)
     } state = STATE_PRE;
 
     // Remembers at what time the recording started.
-    auto t0 = 0;
+    Uint32 t0 = 0;
 
     SDL_Event e = { 0 };
     while (e.type != SDL_QUIT) {
@@ -75,6 +135,17 @@ int main(int argc, char **argv)
         SDL_RenderClear(g_renderer);
 
         // TODO: Render
+        switch (state) {
+        case STATE_PRE:
+            rendermid(g_texts[TEXT_INSTRUCTION].get(), 0.5f, 0.33f, w, h);
+            rendermid(g_texts[TEXT_START].get(), 0.5f, 0.66f, w, h);
+            break;
+        case STATE_RECORDING:
+            break;
+        case STATE_DONE:
+            rendermid(g_texts[TEXT_QUIT].get(), 0.5f, 0.5f, w, h);
+            break;
+        }
 
         // Swap framebuffers.
         SDL_RenderPresent(g_renderer);
@@ -112,6 +183,15 @@ bool sdl_verify(int ret, std::string msg)
 {
     if (ret != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL Error", ("Error " + msg + ": " + SDL_GetError()).c_str(), nullptr);
+        return false;
+    }
+    return true;
+}
+
+bool ttf_verify(int ret, std::string msg)
+{
+    if (ret != 0) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "SDL Error", ("Error " + msg + ": " + TTF_GetError()).c_str(), nullptr);
         return false;
     }
     return true;
@@ -160,3 +240,25 @@ bool init_realsense()
 
     return pxc_verify(g_sm->Init(), "Initialize the capture.");
 }
+
+std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt)
+{
+    SDL_Color white = { 255, 255, 255, 255 };
+
+    //We need to first render to a surface as that's what TTF_RenderText
+    //returns, then load that surface into a texture
+    std::unique_ptr<SDL_Surface, decltype(surf_deleter)> surf(
+        TTF_RenderText_Blended(g_font, txt, white),
+        surf_deleter
+    );
+
+    if (!ttf_verify(surf == nullptr, "writing some text."))
+        return nullptr;
+
+    std::unique_ptr<SDL_Texture, decltype(tex_deleter)> tex(
+        SDL_CreateTextureFromSurface(g_renderer, surf.get()),
+        tex_deleter
+    );
+    sdl_verify(tex == nullptr, "moving the surface to a texture.");
+    return tex;
+};
