@@ -11,13 +11,16 @@
 
 // As global so we can use atexit.
 PXCSenseManager *g_sm = nullptr;
+SDL_Window *g_window = nullptr;
+SDL_Renderer *g_renderer = nullptr;
 
 // Makes our error-checking life a little easier.
 bool pxc_verify(pxcStatus ret, std::string msg);
 bool sdl_verify(int ret, std::string msg);
 bool init_realsense();
 
-int main(int argc, char **argv){
+int main(int argc, char **argv)
+{
     if (!sdl_verify(SDL_Init(SDL_INIT_EVERYTHING), "initializing SDL"))
         return 1;
     std::atexit(SDL_Quit);
@@ -26,11 +29,23 @@ int main(int argc, char **argv){
     if (!init_realsense())
         return 2;
 
+    // Open up a window.
+    if (!sdl_verify(SDL_CreateWindowAndRenderer(0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP, &g_window, &g_renderer), "opening a window"))
+        return 3;
+    atexit([](){ SDL_DestroyWindow(g_window); });
+    atexit([](){ SDL_DestroyRenderer(g_renderer); });
+
     // It seems that acquiring frames is necessary for the recording to record anything!
     // I tried just idling in a MessageBox and it didn't work.
     // TODO: Or maybe there's another "pull"-like API for recording without explicitly waiting?
     for (int nframes = 0; nframes<100; nframes++) {
-        std::cout << "\rCapturing frame " << nframes+1 << std::flush;
+        // Clear the screen in black.
+        SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
+        SDL_RenderClear(g_renderer);
+        // Swap framebuffers.
+        SDL_RenderPresent(g_renderer);
+
+        std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
 
         // Waits until new frame is available and locks it for application processing.
         if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
