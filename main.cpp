@@ -137,7 +137,6 @@ int main(int argc, char **argv)
                             // I tried just idling in a MessageBox and it didn't work.
 
                             // Waits until new frame is available and locks it for application processing.
-                            //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
                             if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
                                 break;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
 
@@ -163,7 +162,7 @@ int main(int argc, char **argv)
         if (state == STATE_RECORDING) {
             float t = 0.001f*(SDL_GetTicks() - t0);
 
-            // 0-5: Move topleft->topright.
+            // That's the choreography!
             if (0 <= t && t < 3) {
                 x = lerp(t, 0.01, 0.99, 0, 3);
             }
@@ -187,7 +186,7 @@ int main(int argc, char **argv)
         SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
         SDL_RenderClear(g_renderer);
 
-        // TODO: Render
+        // The rendering.
         switch (state) {
         case STATE_PRE:
             rendermid(g_texts[TEXT_INSTRUCTION].get(), 0.5f, 0.33f, w, h);
@@ -204,20 +203,6 @@ int main(int argc, char **argv)
 
         // Swap framebuffers.
         SDL_RenderPresent(g_renderer);
-
-        //// Only record when we should be recording, duh!
-        //if (state == STATE_RECORDING) {
-        //    // It seems that acquiring frames is necessary for the recording to record anything!
-        //    // I tried just idling in a MessageBox and it didn't work.
-
-        //    // Waits until new frame is available and locks it for application processing.
-        //    //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
-        //    if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
-        //        return 100;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
-
-        //    // Done working with the frame.
-        //    g_sm->ReleaseFrame();
-        //}
     }
 
     return 0;
