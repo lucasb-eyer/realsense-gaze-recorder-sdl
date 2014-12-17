@@ -35,24 +35,63 @@ int main(int argc, char **argv)
     atexit([](){ SDL_DestroyWindow(g_window); });
     atexit([](){ SDL_DestroyRenderer(g_renderer); });
 
-    // It seems that acquiring frames is necessary for the recording to record anything!
-    // I tried just idling in a MessageBox and it didn't work.
-    // TODO: Or maybe there's another "pull"-like API for recording without explicitly waiting?
-    for (int nframes = 0; nframes<100; nframes++) {
+    // This is an extremely simple state-machine for handling input with the states
+    // preparing -> recording -> done.
+    enum {
+        STATE_PRE,
+        STATE_RECORDING,
+        STATE_DONE,
+    } state = STATE_PRE;
+
+    // Remembers at what time the recording started.
+    auto t0 = 0;
+
+    SDL_Event e = { 0 };
+    while (e.type != SDL_QUIT) {
+        // Handle all events before moving to the next frame!
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_KEYUP) {
+                // Start recording when the user presses a key!
+                if (state == STATE_PRE) {
+                    state = STATE_RECORDING;
+                    t0 = SDL_GetTicks();
+                }
+                // When done recording, quit upon a keypress.
+                else if (state == STATE_DONE) {
+                    e.type = SDL_QUIT;
+                }
+            }
+            // Ignore all other kinds of events.
+        }
+
+        // Update the dot's position according to the "storyline".
+        if (state == STATE_RECORDING) {
+            // For now, the storyline is to record one second!
+            state = SDL_GetTicks() < t0 + 5000 ? STATE_RECORDING : STATE_DONE;
+        }
+
         // Clear the screen in black.
         SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, 255);
         SDL_RenderClear(g_renderer);
+
+        // TODO: Render
+
         // Swap framebuffers.
         SDL_RenderPresent(g_renderer);
 
-        std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
+        // Only record when we should be recording, duh!
+        if (state == STATE_RECORDING) {
+            // It seems that acquiring frames is necessary for the recording to record anything!
+            // I tried just idling in a MessageBox and it didn't work.
 
-        // Waits until new frame is available and locks it for application processing.
-        if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
-            return 100;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
+            // Waits until new frame is available and locks it for application processing.
+            //std::cout << "\rCapturing frame " << nframes + 1 << std::flush;
+            if (!pxc_verify(g_sm->AcquireFrame(true), "Acquiring frame"))
+                return 100;  // TODO: Apparently one should recover from PXC_STATUS_STREAM_CONFIG_CHANGED?
 
-        // Done working with the frame.
-        g_sm->ReleaseFrame();
+            // Done working with the frame.
+            g_sm->ReleaseFrame();
+        }
     }
 
     return 0;
