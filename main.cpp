@@ -41,9 +41,9 @@ std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt);
 
 // x,y are relative screen coordinates, 0 being top/left and 1 being bottom/right.
 // w,h are screen resolution.
-void rendermid(SDL_Texture* tex, float x, float y, int w, int h);
+void rendermid(SDL_Texture* tex, double x, double y, int w, int h);
 
-float lerp(float t, float x0, float x1, float t0, float t1) { return x0 + (t - t0) / (t1 - t0) * (x1 - x0); };
+double lerp(double t, double x0, double x1, double t0, double t1) { return x0 + (t - t0) / (t1 - t0) * (x1 - x0); };
 
 int main(int argc, char **argv)
 {
@@ -55,7 +55,9 @@ int main(int argc, char **argv)
         return 1;
     std::atexit(TTF_Quit);
 
-    if (!sdl_verify(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG == IMG_INIT_PNG, "initializing SDL Image"))
+    bool isInitPngSet = (IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == IMG_INIT_PNG;
+    // Be aware that SDL uses 0 for ok.
+    if (!sdl_verify(isInitPngSet ? 0 : -1 , "initializing SDL Image"))
         return 1;
 
     // Gets `g_sm` ready for recording what we need.
@@ -110,9 +112,6 @@ int main(int argc, char **argv)
         STATE_QUIT,
     } state = STATE_PRE;
 
-    // The current position of Mr.Point (in relative screen-coordinates).
-    float x = 0.01f, y = 0.01f;
-
     // Remembers at what time the recording started.
     Uint32 t0 = 0;
 
@@ -158,9 +157,12 @@ int main(int argc, char **argv)
             // Ignore all other kinds of events.
         }
 
+        // The current position of Mr.Point (in relative screen-coordinates).
+        double x = 0.01, y = 0.01;
+
         // Update the dot's position according to the "storyline".
         if (state == STATE_RECORDING) {
-            float t = 0.001f*(SDL_GetTicks() - t0);
+            double t = 0.001*(SDL_GetTicks() - t0);
 
             // That's the choreography!
             if (0 <= t && t < 3) {
@@ -303,7 +305,7 @@ std::unique_ptr<SDL_Texture, decltype(tex_deleter)> mktxt(const char* txt)
     return tex;
 };
 
-void rendermid(SDL_Texture* tex, float x, float y, int w, int h)
+void rendermid(SDL_Texture* tex, double x, double y, int w, int h)
 {
     // Get the texture w/h.
     int tw, th;
@@ -311,8 +313,8 @@ void rendermid(SDL_Texture* tex, float x, float y, int w, int h)
 
     //Setup the destination rectangle to be at the (pixel) position we want.
     SDL_Rect dst;
-    dst.x = int(x*w - tw*0.5f);
-    dst.y = int(y*h - th*0.5f);
+    dst.x = int(x*w - tw*0.5);
+    dst.y = int(y*h - th*0.5);
 
     //Query the texture to get its width and height to use
     SDL_QueryTexture(tex, NULL, NULL, &dst.w, &dst.h);
