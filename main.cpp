@@ -191,15 +191,15 @@ int main(int argc, char **argv)
         // The rendering.
         switch (state) {
         case STATE_PRE:
-            rendermid(g_texts[TEXT_INSTRUCTION].get(), 0.5f, 0.33f, w, h);
-            rendermid(g_texts[TEXT_START].get(), 0.5f, 0.66f, w, h);
+            rendermid(g_texts[TEXT_INSTRUCTION].get(), 0.5, 0.33, w, h);
+            rendermid(g_texts[TEXT_START].get(), 0.5, 0.66, w, h);
             rendermid(mrpoint.get(), x, y, w, h);
             break;
         case STATE_RECORDING:
             rendermid(mrpoint.get(), x, y, w, h);
             break;
         case STATE_DONE:
-            rendermid(g_texts[TEXT_QUIT].get(), 0.5f, 0.5f, w, h);
+            rendermid(g_texts[TEXT_QUIT].get(), 0.5, 0.5, w, h);
             break;
         }
 
