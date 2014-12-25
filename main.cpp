@@ -165,6 +165,8 @@ int main(int argc, char **argv)
             double t = 0.001*(SDL_GetTicks() - t0);
 
             // That's the choreography!
+
+            // Move along the screen border once
             if (0 <= t && t < 3) {
                 x = lerp(t, 0.01, 0.99, 0, 3);
             }
@@ -177,8 +179,94 @@ int main(int argc, char **argv)
             else if (8 <= t && t < 10) {
                 y = lerp(t, 0.99, 0.01, 8, 10);
             }
+            // Then zig-zag just like regular reading.
+            else if (10 <= t && t < 14) {
+                x = lerp(t, 0.01, 0.99, 10, 14);
+            }
+            else if (14 <= t && t < 15) {
+                x = lerp(t, 0.99, 0.01, 14, 15);
+                y = lerp(t, 0.01, 0.20, 14, 15);
+            }
+            else if (15 <= t && t < 19) {
+                x = lerp(t, 0.01, 0.99, 15, 19);
+            }
+            else if (19 <= t && t < 20) {
+                x = lerp(t, 0.99, 0.01, 19, 20);
+                y = lerp(t, 0.20, 0.40, 19, 20);
+            }
+            else if (20 <= t && t < 24) {
+                x = lerp(t, 0.01, 0.99, 20, 24);
+            }
+            else if (24 <= t && t < 25) {
+                x = lerp(t, 0.99, 0.01, 24, 25);
+                y = lerp(t, 0.40, 0.60, 24, 25);
+            }
+            else if (25 <= t && t < 29) {
+                x = lerp(t, 0.01, 0.99, 25, 29);
+            }
+            else if (29 <= t && t < 30) {
+                x = lerp(t, 0.99, 0.01, 29, 30);
+                y = lerp(t, 0.60, 0.80, 29, 30);
+            }
+            else if (30 <= t && t < 34) {
+                x = lerp(t, 0.01, 0.99, 30, 34);
+            }
+            else if (34 <= t && t < 35) {
+                x = lerp(t, 0.99, 0.01, 34, 35);
+                y = lerp(t, 0.80, 0.99, 34, 35);
+            }
+            else if (35 <= t && t < 39) {
+                x = lerp(t, 0.01, 0.99, 35, 39);
+            }
+            else if (39 <= t && t < 40) {
+                x = lerp(t, 0.99, 0.01, 39, 40);
+                y = lerp(t, 0.99, 0.01, 39, 40);
+            }
+            // Then zig-zag vertically.
+            else if (40 <= t && t < 44) {
+                y = lerp(t, 0.01, 0.99, 40, 44);
+            }
+            else if (44 <= t && t < 45) {
+                x = lerp(t, 0.01, 0.20, 44, 45);
+                y = lerp(t, 0.99, 0.01, 44, 45);
+            }
+            else if (45 <= t && t < 49) {
+                y = lerp(t, 0.01, 0.99, 45, 49);
+            }
+            else if (49 <= t && t < 50) {
+                x = lerp(t, 0.20, 0.40, 49, 50);
+                y = lerp(t, 0.99, 0.01, 49, 50);
+            }
+            else if (50 <= t && t < 54) {
+                y = lerp(t, 0.01, 0.99, 50, 54);
+            }
+            else if (54 <= t && t < 55) {
+                x = lerp(t, 0.40, 0.60, 54, 55);
+                y = lerp(t, 0.99, 0.01, 54, 55);
+            }
+            else if (55 <= t && t < 59) {
+                y = lerp(t, 0.01, 0.99, 55, 59);
+            }
+            else if (59 <= t && t < 60) {
+                x = lerp(t, 0.60, 0.80, 59, 60);
+                y = lerp(t, 0.99, 0.01, 59, 60);
+            }
+            else if (60 <= t && t < 64) {
+                y = lerp(t, 0.01, 0.99, 60, 64);
+            }
+            else if (64 <= t && t < 65) {
+                x = lerp(t, 0.80, 0.99, 64, 65);
+                y = lerp(t, 0.99, 0.01, 64, 65);
+            }
+            else if (65 <= t && t < 69) {
+                y = lerp(t, 0.01, 0.99, 65, 69);
+            }
+            else if (69 <= t && t < 70) {
+                x = lerp(t, 0.99, 0.01, 69, 70);
+                y = lerp(t, 0.99, 0.01, 69, 70);
+            }
+            // Switch over to done state.
             else {
-                // Switch over to done state.
                 state = STATE_DONE;
                 record_thread.join();
             }
