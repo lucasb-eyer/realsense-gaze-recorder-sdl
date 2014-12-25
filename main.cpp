@@ -112,6 +112,9 @@ int main(int argc, char **argv)
         STATE_QUIT,
     } state = STATE_PRE;
 
+    // The current position of Mr.Point (in relative screen-coordinates).
+    double x = 0.01, y = 0.01;
+
     // Remembers at what time the recording started.
     Uint32 t0 = 0;
 
@@ -156,9 +159,6 @@ int main(int argc, char **argv)
             }
             // Ignore all other kinds of events.
         }
-
-        // The current position of Mr.Point (in relative screen-coordinates).
-        double x = 0.01, y = 0.01;
 
         // Update the dot's position according to the "storyline".
         if (state == STATE_RECORDING) {
