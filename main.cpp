@@ -55,7 +55,9 @@ int main(int argc, char **argv)
         return 1;
     std::atexit(TTF_Quit);
 
-    if (!sdl_verify(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG == IMG_INIT_PNG, "initializing SDL Image"))
+    bool isInitPngSet = (IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG) == IMG_INIT_PNG;
+    // Be aware that SDL uses 0 for ok.
+    if (!sdl_verify(isInitPngSet ? 0 : -1 , "initializing SDL Image"))
         return 1;
 
     // Gets `g_sm` ready for recording what we need.
